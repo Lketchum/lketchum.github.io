@@ -1,8 +1,9 @@
 ---
 title: ChatGPT网站
-categories: 大模型
+categories: 开发随笔
 tags:
-    - 大模型
+  - 大模型
+  - 工具实践
 ---
 # ChatGPT网站
 
