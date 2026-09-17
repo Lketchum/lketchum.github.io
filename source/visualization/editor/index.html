@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Web 3D 协同同步编辑器 | LKetchum</title>
+    <meta
+      name="description"
+      content="Static GitHub Pages demo: Three.js + Yjs + y-webrtc collaborative mesh state sync."
+    />
+
+    <!-- ES Module CDN import map -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+          "yjs": "https://esm.sh/yjs@13.6.20",
+          "y-webrtc": "https://esm.sh/y-webrtc@10.3.0?deps=yjs@13.6.20"
+        }
+      }
+    </script>
+
+    <style>
+      :root {
+        --bg: #0f1419;
+        --panel: rgba(18, 24, 32, 0.92);
+        --line: #2a3441;
+        --text: #e8eef5;
+        --muted: #93a1b3;
+        --accent: #3dd6c6;
+        --warn: #f0b429;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+
+      #app {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+
+      #viewport {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .hud {
+        position: absolute;
+        z-index: 10;
+        top: 16px;
+        left: 16px;
+        width: min(380px, calc(100vw - 32px));
+        padding: 14px 16px 16px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      }
+
+      .hud h1 {
+        margin: 0 0 4px;
+        font-size: 16px;
+        font-weight: 650;
+        letter-spacing: 0.02em;
+      }
+
+      .hud .sub {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .row label {
+        flex: 0 0 auto;
+        min-width: 52px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      input[type="text"],
+      select {
+        flex: 1;
+        min-width: 0;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0b1016;
+        color: var(--text);
+        outline: none;
+      }
+
+      input[type="text"]:focus,
+      select:focus {
+        border-color: var(--accent);
+      }
+
+      input[type="color"] {
+        width: 42px;
+        height: 34px;
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      button {
+        padding: 8px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #182231;
+        color: var(--text);
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 4px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #667788;
+      }
+
+      .dot.on {
+        background: var(--accent);
+        box-shadow: 0 0 8px rgba(61, 214, 198, 0.7);
+      }
+
+      .dot.warn {
+        background: var(--warn);
+      }
+
+      .tips {
+        margin: 12px 0 0;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+
+      .tips code {
+        color: var(--accent);
+        font-family: ui-monospace, Consolas, monospace;
+      }
+
+      .back {
+        position: absolute;
+        z-index: 10;
+        top: 16px;
+        right: 16px;
+        text-decoration: none;
+        color: var(--muted);
+        font-size: 12px;
+        padding: 8px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      .back:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+
+      #loadingMask {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(15, 20, 25, 0.55);
+        color: var(--text);
+        font-size: 14px;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+
+      #loadingMask.show {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="viewport"></canvas>
+      <div id="loadingMask">正在加载 3D 模型…</div>
+
+      <aside class="hud">
+        <h1>Web 3D 协同同步编辑器</h1>
+        <p class="sub">
+          Three.js + Yjs + y-webrtc · 加载 glTF 模型并协同变换 · 不同步相机
+        </p>
+
+        <div class="row">
+          <label for="roomInput">房间</label>
+          <input id="roomInput" type="text" spellcheck="false" />
+          <button id="copyLinkBtn" type="button">复制链接</button>
+        </div>
+
+        <div class="row">
+          <label for="modelSelect">模型</label>
+          <select id="modelSelect">
+            <option value="helmet">Damaged Helmet</option>
+            <option value="duck">Duck</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <label for="colorInput">颜色</label>
+          <input id="colorInput" type="color" value="#ffffff" />
+          <button id="resetBtn" type="button">重置物体</button>
+        </div>
+
+        <div class="status">
+          <span class="pill"
+            ><span id="connDot" class="dot"></span
+            ><span id="connText">连接中…</span></span
+          >
+          <span class="pill"
+            ><span id="peerDot" class="dot"></span
+            ><span id="peerText">peers: 0</span></span
+          >
+          <span class="pill"
+            ><span id="modelDot" class="dot warn"></span
+            ><span id="modelText">模型未加载</span></span
+          >
+        </div>
+
+        <p class="tips">
+          默认加载本地 glTF 示例模型（Khronos Sample Models）。<br />
+          拖拽坐标轴编辑；快捷键 <code>G</code>/<code>R</code>/<code>S</code>
+          切换平移/旋转/缩放。<br />
+          另开标签页、同一房间即可同步模型选择与变换。
+        </p>
+      </aside>
+
+      <a class="back" href="/visualization/">← 返回专栏</a>
+    </div>
+
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { TransformControls } from "three/addons/controls/TransformControls.js";
+      import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+      import * as Y from "yjs";
+      import { WebrtcProvider } from "y-webrtc";
+
+      // ---------------------------------------------------------------------------
+      // Shared defaults + demo model catalog (static CDN assets)
+      // ---------------------------------------------------------------------------
+      const MODEL_CATALOG = {
+        helmet: {
+          name: "Damaged Helmet",
+          url: "./models/DamagedHelmet.glb",
+          targetSize: 2.2,
+        },
+        duck: {
+          name: "Duck",
+          url: "./models/Duck.glb",
+          targetSize: 2.0,
+        },
+      };
+
+      const DEFAULT_STATE = {
+        position: [0, 0, 0],
+        rotation: [0, 0.55, 0],
+        scale: [1, 1, 1],
+        materialColor: "#ffffff",
+        modelId: "helmet",
+      };
+
+      const roomFromUrl =
+        new URLSearchParams(window.location.search).get("room") ||
+        "lketchum-viz-demo";
+
+      const roomInput = document.getElementById("roomInput");
+      const modelSelect = document.getElementById("modelSelect");
+      const colorInput = document.getElementById("colorInput");
+      const copyLinkBtn = document.getElementById("copyLinkBtn");
+      const resetBtn = document.getElementById("resetBtn");
+      const connDot = document.getElementById("connDot");
+      const connText = document.getElementById("connText");
+      const peerDot = document.getElementById("peerDot");
+      const peerText = document.getElementById("peerText");
+      const modelDot = document.getElementById("modelDot");
+      const modelText = document.getElementById("modelText");
+      const loadingMask = document.getElementById("loadingMask");
+
+      roomInput.value = roomFromUrl;
+      modelSelect.value = DEFAULT_STATE.modelId;
+      colorInput.value = DEFAULT_STATE.materialColor;
+
+      /** Prevent local TransformControls from echoing remote updates back into Yjs. */
+      let isRemoteUpdate = false;
+      let currentModelId = DEFAULT_STATE.modelId;
+      let loadToken = 0;
+
+      // ===========================================================================
+      // Phase 1: Yjs & WebRTC collaboration bootstrap
+      // ===========================================================================
+      const ydoc = new Y.Doc();
+      const yMeshState = ydoc.getMap("meshState");
+
+      const provider = new WebrtcProvider(roomFromUrl, ydoc, {
+        signaling: [
+          "wss://signaling.yjs.dev",
+          "wss://y-webrtc-signaling-eu.herokuapp.com",
+          "wss://y-webrtc-signaling-us.herokuapp.com",
+        ],
+      });
+
+      function setConnStatus(connected) {
+        connDot.classList.toggle("on", connected);
+        connDot.classList.toggle("warn", !connected);
+        connText.textContent = connected ? "信令已连接" : "信令断开/重连中";
+      }
+
+      function setPeerStatus(count) {
+        peerDot.classList.toggle("on", count > 0);
+        peerText.textContent = `peers: ${count}`;
+      }
+
+      function setModelStatus(text, ok) {
+        modelText.textContent = text;
+        modelDot.classList.toggle("on", Boolean(ok));
+        modelDot.classList.toggle("warn", !ok);
+      }
+
+      function setLoading(show, text) {
+        loadingMask.classList.toggle("show", show);
+        if (text) loadingMask.textContent = text;
+      }
+
+      setConnStatus(false);
+      setPeerStatus(0);
+      setModelStatus("模型未加载", false);
+
+      provider.on("status", (event) => {
+        setConnStatus(Boolean(event.connected));
+      });
+
+      provider.on("peers", (event) => {
+        const webrtcPeers = event?.webrtcPeers?.size ?? 0;
+        const bcPeers = event?.bcPeers?.size ?? 0;
+        setPeerStatus(Math.max(webrtcPeers, bcPeers));
+      });
+
+      function ensureInitialState() {
+        if (yMeshState.size > 0) return;
+        ydoc.transact(() => {
+          yMeshState.set("position", DEFAULT_STATE.position);
+          yMeshState.set("rotation", DEFAULT_STATE.rotation);
+          yMeshState.set("scale", DEFAULT_STATE.scale);
+          yMeshState.set("materialColor", DEFAULT_STATE.materialColor);
+          yMeshState.set("modelId", DEFAULT_STATE.modelId);
+        });
+      }
+
+      ensureInitialState();
+
+      // ===========================================================================
+      // Phase 2: Three.js scene / lights / renderer / model root
+      // ===========================================================================
+      const canvas = document.getElementById("viewport");
+      const renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        alpha: false,
+        preserveDrawingBuffer: true,
+      });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.05;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0f1419);
+      scene.fog = new THREE.Fog(0x0f1419, 18, 48);
+
+      // PBR models (e.g. DamagedHelmet) need an environment map to be visible.
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      pmrem.dispose();
+
+      const camera = new THREE.PerspectiveCamera(
+        55,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        100
+      );
+      camera.position.set(4.5, 3.4, 5.6);
+
+      const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+      scene.add(ambient);
+
+      const hemi = new THREE.HemisphereLight(0xbcd7ff, 0x1a222c, 0.9);
+      scene.add(hemi);
+
+      const dir = new THREE.DirectionalLight(0xffffff, 1.6);
+      dir.position.set(5, 8, 3);
+      dir.castShadow = true;
+      dir.shadow.mapSize.set(1024, 1024);
+      scene.add(dir);
+
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(30, 30),
+        new THREE.MeshStandardMaterial({
+          color: 0x1a222c,
+          roughness: 0.95,
+          metalness: 0.05,
+        })
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      const grid = new THREE.GridHelper(30, 30, 0x3dd6c6, 0x243041);
+      grid.position.y = 0.001;
+      grid.material.opacity = 0.35;
+      grid.material.transparent = true;
+      scene.add(grid);
+
+      // Sync root: TransformControls + Yjs operate on this group, not camera.
+      const modelRoot = new THREE.Group();
+      modelRoot.name = "syncRoot";
+      scene.add(modelRoot);
+
+      const gltfLoader = new GLTFLoader();
+      const editableMaterials = [];
+
+      const orbit = new OrbitControls(camera, renderer.domElement);
+      orbit.enableDamping = true;
+      orbit.target.set(0, 1.1, 0);
+
+      const transform = new TransformControls(camera, renderer.domElement);
+      transform.attach(modelRoot);
+      transform.setMode("translate");
+      scene.add(transform.getHelper());
+
+      function clearModelContent() {
+        while (modelRoot.children.length) {
+          const child = modelRoot.children[0];
+          modelRoot.remove(child);
+          child.traverse((obj) => {
+            if (obj.isMesh) {
+              obj.geometry?.dispose?.();
+              if (Array.isArray(obj.material)) {
+                obj.material.forEach((m) => m.dispose?.());
+              } else {
+                obj.material?.dispose?.();
+              }
+            }
+          });
+        }
+        editableMaterials.length = 0;
+      }
+
+      function fitObjectToSize(object3d, targetSize) {
+        object3d.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(object3d);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        const s = targetSize / maxDim;
+
+        object3d.position.sub(center);
+        object3d.scale.setScalar(s);
+        object3d.updateMatrixWorld(true);
+
+        const fitted = new THREE.Box3().setFromObject(object3d);
+        object3d.position.y -= fitted.min.y;
+      }
+
+      function collectMaterials(root) {
+        root.traverse((obj) => {
+          if (!obj.isMesh) return;
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((mat) => {
+            if (mat && mat.color) editableMaterials.push(mat);
+          });
+        });
+      }
+
+      function applyTint(hex) {
+        const color = new THREE.Color(hex);
+        editableMaterials.forEach((mat) => mat.color.copy(color));
+        colorInput.value = hex;
+      }
+
+      function createFallbackMesh() {
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(1.4, 1.4, 1.4),
+          new THREE.MeshStandardMaterial({
+            color: new THREE.Color(DEFAULT_STATE.materialColor),
+            roughness: 0.35,
+            metalness: 0.2,
+          })
+        );
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.position.y = 0.7;
+        return mesh;
+      }
+
+      async function loadModel(modelId) {
+        const token = ++loadToken;
+        const meta = MODEL_CATALOG[modelId] || MODEL_CATALOG.helmet;
+        const nextId = modelId in MODEL_CATALOG ? modelId : "helmet";
+        currentModelId = nextId;
+        modelSelect.value = currentModelId;
+
+        setLoading(true, `正在加载 ${meta.name}…`);
+        setModelStatus(`加载中: ${meta.name}`, false);
+        clearModelContent();
+
+        try {
+          const gltf = await gltfLoader.loadAsync(meta.url);
+          if (token !== loadToken) return false;
+
+          const model = gltf.scene;
+          fitObjectToSize(model, meta.targetSize);
+          collectMaterials(model);
+          modelRoot.add(model);
+
+          const tint =
+            yMeshState.get("materialColor") || DEFAULT_STATE.materialColor;
+          applyTint(tint);
+          setModelStatus(`已加载: ${meta.name}`, true);
+          return true;
+        } catch (error) {
+          console.error("Model load failed, fallback to box:", error);
+          if (token !== loadToken) return false;
+
+          const fallback = createFallbackMesh();
+          collectMaterials(fallback);
+          modelRoot.add(fallback);
+          applyTint(
+            yMeshState.get("materialColor") || DEFAULT_STATE.materialColor
+          );
+          setModelStatus("CDN 失败，已用立方体兜底", false);
+          return true;
+        } finally {
+          if (token === loadToken) setLoading(false);
+        }
+      }
+
+      // Mode hotkeys: g translate / r rotate / s scale
+      window.addEventListener("keydown", (event) => {
+        if (event.target && ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)) {
+          return;
+        }
+        switch (event.key.toLowerCase()) {
+          case "g":
+            transform.setMode("translate");
+            break;
+          case "r":
+            transform.setMode("rotate");
+            break;
+          case "s":
+            transform.setMode("scale");
+            break;
+          default:
+            break;
+        }
+      });
+
+      // ===========================================================================
+      // Phase 3: TransformControls -> Yjs write (Local -> Remote)
+      // ===========================================================================
+      function writeMeshStateToYjs() {
+        if (isRemoteUpdate) return;
+
+        const position = modelRoot.position.toArray();
+        const rotation = [
+          modelRoot.rotation.x,
+          modelRoot.rotation.y,
+          modelRoot.rotation.z,
+        ];
+        const scale = modelRoot.scale.toArray();
+        const materialColor = colorInput.value || DEFAULT_STATE.materialColor;
+
+        ydoc.transact(() => {
+          yMeshState.set("position", position);
+          yMeshState.set("rotation", rotation);
+          yMeshState.set("scale", scale);
+          yMeshState.set("materialColor", materialColor);
+          yMeshState.set("modelId", currentModelId);
+        });
+      }
+
+      transform.addEventListener("dragging-changed", (event) => {
+        orbit.enabled = !event.value;
+        if (!event.value) writeMeshStateToYjs();
+      });
+
+      transform.addEventListener("objectChange", () => {
+        writeMeshStateToYjs();
+      });
+
+      colorInput.addEventListener("input", () => {
+        if (isRemoteUpdate) return;
+        applyTint(colorInput.value);
+        writeMeshStateToYjs();
+      });
+
+      modelSelect.addEventListener("change", async () => {
+        if (isRemoteUpdate) return;
+        currentModelId = modelSelect.value;
+        await loadModel(currentModelId);
+        writeMeshStateToYjs();
+      });
+
+      resetBtn.addEventListener("click", () => {
+        if (isRemoteUpdate) return;
+        ydoc.transact(() => {
+          yMeshState.set("position", [...DEFAULT_STATE.position]);
+          yMeshState.set("rotation", [...DEFAULT_STATE.rotation]);
+          yMeshState.set("scale", [...DEFAULT_STATE.scale]);
+          yMeshState.set("materialColor", DEFAULT_STATE.materialColor);
+          yMeshState.set("modelId", DEFAULT_STATE.modelId);
+        });
+      });
+
+      // ===========================================================================
+      // Phase 4: Yjs observe -> Three.js state update (Remote -> Local)
+      // ===========================================================================
+      let syncReady = false;
+
+      function applyTransformFromYjs() {
+        const position = yMeshState.get("position") || DEFAULT_STATE.position;
+        const rotation = yMeshState.get("rotation") || DEFAULT_STATE.rotation;
+        const scale = yMeshState.get("scale") || DEFAULT_STATE.scale;
+        const materialColor =
+          yMeshState.get("materialColor") || DEFAULT_STATE.materialColor;
+
+        isRemoteUpdate = true;
+        try {
+          modelRoot.position.fromArray(position);
+          modelRoot.rotation.set(rotation[0], rotation[1], rotation[2]);
+          modelRoot.scale.fromArray(scale);
+          applyTint(materialColor);
+          modelRoot.updateMatrixWorld(true);
+        } finally {
+          isRemoteUpdate = false;
+        }
+      }
+
+      async function applyMeshStateFromYjs() {
+        if (!syncReady) return;
+        const nextModelId = yMeshState.get("modelId") || DEFAULT_STATE.modelId;
+        if (nextModelId !== currentModelId) {
+          isRemoteUpdate = true;
+          try {
+            await loadModel(nextModelId);
+          } finally {
+            isRemoteUpdate = false;
+          }
+        }
+        applyTransformFromYjs();
+      }
+
+      yMeshState.observe(() => {
+        applyMeshStateFromYjs();
+      });
+
+      // Initial model first; enable remote sync afterwards to avoid concurrent loads.
+      try {
+        await loadModel(yMeshState.get("modelId") || DEFAULT_STATE.modelId);
+        applyTransformFromYjs();
+        syncReady = true;
+      } catch (error) {
+        console.error(error);
+        setModelStatus(`初始化失败: ${error?.message || error}`, false);
+      }
+
+      window.__vizDebug = {
+        scene,
+        camera,
+        renderer,
+        modelRoot,
+        info() {
+          const box = new THREE.Box3().setFromObject(modelRoot);
+          return {
+            children: modelRoot.children.length,
+            meshCount: (() => {
+              let n = 0;
+              modelRoot.traverse((o) => {
+                if (o.isMesh) n += 1;
+              });
+              return n;
+            })(),
+            rootPos: modelRoot.position.toArray(),
+            rootScale: modelRoot.scale.toArray(),
+            boxMin: box.min.toArray(),
+            boxMax: box.max.toArray(),
+            camPos: camera.position.toArray(),
+          };
+        },
+      };
+
+      // ===========================================================================
+      // Phase 5: Render loop & resize
+      // ===========================================================================
+      function onResize() {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+      }
+
+      window.addEventListener("resize", onResize);
+
+      function animate() {
+        requestAnimationFrame(animate);
+        orbit.update();
+        renderer.render(scene, camera);
+      }
+
+      animate();
+
+      // ---------------------------------------------------------------------------
+      // Room / share helpers
+      // ---------------------------------------------------------------------------
+      function navigateToRoom(room) {
+        const next = room.trim() || "lketchum-viz-demo";
+        const url = new URL(window.location.href);
+        url.searchParams.set("room", next);
+        window.location.href = url.toString();
+      }
+
+      roomInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") navigateToRoom(roomInput.value);
+      });
+
+      roomInput.addEventListener("change", () => {
+        if (roomInput.value.trim() !== roomFromUrl) {
+          navigateToRoom(roomInput.value);
+        }
+      });
+
+      copyLinkBtn.addEventListener("click", async () => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("room", roomInput.value.trim() || roomFromUrl);
+        try {
+          await navigator.clipboard.writeText(url.toString());
+          copyLinkBtn.textContent = "已复制";
+          setTimeout(() => {
+            copyLinkBtn.textContent = "复制链接";
+          }, 1200);
+        } catch {
+          prompt("复制下面的协同链接：", url.toString());
+        }
+      });
+
+      window.addEventListener("beforeunload", () => {
+        provider.destroy();
+        ydoc.destroy();
+      });
+    </script>
+  </body>
+</html>
