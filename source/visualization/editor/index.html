@@ -16,7 +16,7 @@
           "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
           "yjs": "https://esm.sh/yjs@13.6.20",
-          "y-webrtc": "https://esm.sh/y-webrtc@10.3.0?deps=yjs@13.6.20"
+          "y-websocket": "https://esm.sh/y-websocket@2.0.4?deps=yjs@13.6.20"
         }
       }
     </script>
@@ -238,7 +238,7 @@
       <aside class="hud">
         <h1>Web 3D 协同同步编辑器</h1>
         <p class="sub">
-          Three.js + Yjs + y-webrtc · 加载 glTF 模型并协同变换 · 不同步相机
+          Three.js + Yjs + y-websocket · 跨设备协同（中继同步）· 不同步相机
         </p>
 
         <div class="row">
@@ -261,6 +261,11 @@
           <button id="resetBtn" type="button">重置物体</button>
         </div>
 
+        <div class="row">
+          <label></label>
+          <button id="reconnectBtn" type="button">重新连接</button>
+        </div>
+
         <div class="status">
           <span class="pill"
             ><span id="connDot" class="dot"></span
@@ -268,7 +273,7 @@
           >
           <span class="pill"
             ><span id="peerDot" class="dot"></span
-            ><span id="peerText">peers: 0</span></span
+            ><span id="peerText">在线: 1</span></span
           >
           <span class="pill"
             ><span id="modelDot" class="dot warn"></span
@@ -277,10 +282,10 @@
         </div>
 
         <p class="tips">
-          默认加载本地 glTF 示例模型（Khronos Sample Models）。<br />
-          拖拽坐标轴编辑；快捷键 <code>G</code>/<code>R</code>/<code>S</code>
-          切换平移/旋转/缩放。<br />
-          另开标签页、同一房间即可同步模型选择与变换。
+          跨电脑验证：两边打开<strong>同一链接</strong>（含相同
+          <code>?room=</code>），等状态变为「中继已连接」后再拖动物体。<br />
+          同浏览器多标签、不同浏览器、手机/Mac 都可；不要只看本机预览地址是否一致，房间名必须一致。<br />
+          快捷键 <code>G</code>/<code>R</code>/<code>S</code> = 平移/旋转/缩放。
         </p>
       </aside>
 
@@ -294,7 +299,7 @@
       import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
       import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
       import * as Y from "yjs";
-      import { WebrtcProvider } from "y-webrtc";
+      import { WebsocketProvider } from "y-websocket";
 
       // ---------------------------------------------------------------------------
       // Shared defaults + demo model catalog (static CDN assets)
@@ -320,15 +325,22 @@
         modelId: "helmet",
       };
 
+      // Public Yjs demo relay. Room is prefixed to avoid colliding with other demos.
+      const WS_SERVER =
+        new URLSearchParams(window.location.search).get("ws") ||
+        "wss://demos.yjs.dev";
+
       const roomFromUrl =
         new URLSearchParams(window.location.search).get("room") ||
         "lketchum-viz-demo";
+      const docRoomName = `lketchum-viz/${roomFromUrl}`;
 
       const roomInput = document.getElementById("roomInput");
       const modelSelect = document.getElementById("modelSelect");
       const colorInput = document.getElementById("colorInput");
       const copyLinkBtn = document.getElementById("copyLinkBtn");
       const resetBtn = document.getElementById("resetBtn");
+      const reconnectBtn = document.getElementById("reconnectBtn");
       const connDot = document.getElementById("connDot");
       const connText = document.getElementById("connText");
       const peerDot = document.getElementById("peerDot");
@@ -347,28 +359,28 @@
       let loadToken = 0;
 
       // ===========================================================================
-      // Phase 1: Yjs & WebRTC collaboration bootstrap
+      // Phase 1: Yjs & Websocket collaboration bootstrap
+      // Why not y-webrtc alone?
+      // Public WebRTC signaling is often down; same-browser tabs still sync via
+      // BroadcastChannel, but a second Mac/phone needs a reachable relay.
+      // y-websocket -> demos.yjs.dev provides that relay without our own backend.
       // ===========================================================================
       const ydoc = new Y.Doc();
       const yMeshState = ydoc.getMap("meshState");
 
-      const provider = new WebrtcProvider(roomFromUrl, ydoc, {
-        signaling: [
-          "wss://signaling.yjs.dev",
-          "wss://y-webrtc-signaling-eu.herokuapp.com",
-          "wss://y-webrtc-signaling-us.herokuapp.com",
-        ],
-      });
+      let provider = null;
 
       function setConnStatus(connected) {
         connDot.classList.toggle("on", connected);
         connDot.classList.toggle("warn", !connected);
-        connText.textContent = connected ? "信令已连接" : "信令断开/重连中";
+        connText.textContent = connected ? "中继已连接" : "中继断开/重连中";
       }
 
-      function setPeerStatus(count) {
-        peerDot.classList.toggle("on", count > 0);
-        peerText.textContent = `peers: ${count}`;
+      function setPeerStatus() {
+        const count = provider?.awareness?.getStates()?.size || 1;
+        peerDot.classList.toggle("on", count > 1);
+        peerDot.classList.toggle("warn", count <= 1);
+        peerText.textContent = `在线: ${count}`;
       }
 
       function setModelStatus(text, ok) {
@@ -382,18 +394,51 @@
         if (text) loadingMask.textContent = text;
       }
 
-      setConnStatus(false);
-      setPeerStatus(0);
-      setModelStatus("模型未加载", false);
+      function bindProvider(nextProvider) {
+        if (provider) {
+          try {
+            provider.destroy();
+          } catch (_) {
+            /* ignore */
+          }
+        }
+        provider = nextProvider;
 
-      provider.on("status", (event) => {
-        setConnStatus(Boolean(event.connected));
-      });
+        setConnStatus(Boolean(provider.wsconnected));
+        setPeerStatus();
 
-      provider.on("peers", (event) => {
-        const webrtcPeers = event?.webrtcPeers?.size ?? 0;
-        const bcPeers = event?.bcPeers?.size ?? 0;
-        setPeerStatus(Math.max(webrtcPeers, bcPeers));
+        provider.on("status", (event) => {
+          setConnStatus(event.status === "connected");
+        });
+
+        provider.on("sync", (isSynced) => {
+          if (isSynced) ensureInitialState();
+        });
+
+        provider.awareness.on("change", () => {
+          setPeerStatus();
+        });
+
+        // Mark local presence so remote clients can count peers.
+        provider.awareness.setLocalStateField("user", {
+          name: `user-${Math.floor(Math.random() * 10000)}`,
+          device: navigator.platform || "web",
+          at: Date.now(),
+        });
+      }
+
+      function connectRoom() {
+        const next = new WebsocketProvider(WS_SERVER, docRoomName, ydoc, {
+          connect: true,
+        });
+        bindProvider(next);
+      }
+
+      connectRoom();
+
+      reconnectBtn.addEventListener("click", () => {
+        setConnStatus(false);
+        connectRoom();
       });
 
       function ensureInitialState() {
@@ -406,8 +451,6 @@
           yMeshState.set("modelId", DEFAULT_STATE.modelId);
         });
       }
-
-      ensureInitialState();
 
       // ===========================================================================
       // Phase 2: Three.js scene / lights / renderer / model root
@@ -809,7 +852,11 @@
       });
 
       window.addEventListener("beforeunload", () => {
-        provider.destroy();
+        try {
+          provider?.destroy();
+        } catch (_) {
+          /* ignore */
+        }
         ydoc.destroy();
       });
     </script>

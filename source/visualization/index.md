@@ -13,9 +13,10 @@ toc: false
 
 **[Web 3D 协同同步编辑器](/visualization/editor/)**（Three.js + Yjs + y-webrtc）
 
-- 纯静态，可部署在 GitHub Pages
-- 仅同步物体 `position / rotation / scale / color`，不同步相机
-- 打开两个标签页、同一房间名即可实时协同
+- 纯静态页面 + 公共 Yjs 中继，跨电脑可协同（需两边「中继已连接」）
+- 仅同步物体 `position / rotation / scale / color / modelId`，不同步相机
+- 打开两个浏览器（或 Mac/手机），同一 `?room=` 链接即可实时协同
+- 原理文章：[Web 端多端协同如何在无后端下工作](/2026/03/27/原理详解-Web端多端协同如何在无后端下工作/)
 
 ## 写作目标
 
