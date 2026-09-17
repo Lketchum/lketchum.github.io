@@ -2,7 +2,7 @@
 title: 关于
 date: 2024-07-06 15:44:33
 updated: 2026-03-26 21:00:00
-type: index
+type: about
 ---
 
 ### 博客定位
