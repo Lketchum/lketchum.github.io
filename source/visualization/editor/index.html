@@ -6,17 +6,16 @@
     <title>Web 3D 协同同步编辑器 | LKetchum</title>
     <meta
       name="description"
-      content="Static GitHub Pages demo: Three.js + Yjs + y-webrtc collaborative mesh state sync."
+      content="Static GitHub Pages demo: Three.js + Firebase Realtime Database collaborative mesh state sync."
     />
 
-    <!-- ES Module CDN import map -->
     <script type="importmap">
       {
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-          "yjs": "https://esm.sh/yjs@13.6.20",
-          "y-websocket": "https://esm.sh/y-websocket@2.0.4?deps=yjs@13.6.20"
+          "firebase/app": "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js",
+          "firebase/database": "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js"
         }
       }
     </script>
@@ -77,7 +76,6 @@
         margin: 0 0 4px;
         font-size: 16px;
         font-weight: 650;
-        letter-spacing: 0.02em;
       }
 
       .hud .sub {
@@ -111,11 +109,6 @@
         background: #0b1016;
         color: var(--text);
         outline: none;
-      }
-
-      input[type="text"]:focus,
-      select:focus {
-        border-color: var(--accent);
       }
 
       input[type="color"] {
@@ -205,11 +198,6 @@
         background: var(--panel);
       }
 
-      .back:hover {
-        color: var(--accent);
-        border-color: var(--accent);
-      }
-
       #loadingMask {
         position: absolute;
         inset: 0;
@@ -218,10 +206,8 @@
         align-items: center;
         justify-content: center;
         background: rgba(15, 20, 25, 0.55);
-        color: var(--text);
-        font-size: 14px;
-        pointer-events: none;
         opacity: 0;
+        pointer-events: none;
         transition: opacity 0.2s ease;
       }
 
@@ -238,7 +224,7 @@
       <aside class="hud">
         <h1>Web 3D 协同同步编辑器</h1>
         <p class="sub">
-          Three.js + Yjs + y-websocket · 跨设备协同（中继同步）· 不同步相机
+          Three.js + Firebase Realtime Database · 跨设备同步物体状态 · 不同步相机
         </p>
 
         <div class="row">
@@ -261,19 +247,14 @@
           <button id="resetBtn" type="button">重置物体</button>
         </div>
 
-        <div class="row">
-          <label></label>
-          <button id="reconnectBtn" type="button">重新连接</button>
-        </div>
-
         <div class="status">
           <span class="pill"
             ><span id="connDot" class="dot"></span
-            ><span id="connText">连接中…</span></span
+            ><span id="connText">等待配置…</span></span
           >
           <span class="pill"
             ><span id="peerDot" class="dot"></span
-            ><span id="peerText">在线: 1</span></span
+            ><span id="peerText">在线: 0</span></span
           >
           <span class="pill"
             ><span id="modelDot" class="dot warn"></span
@@ -282,9 +263,9 @@
         </div>
 
         <p class="tips">
-          跨电脑验证：两边打开<strong>同一链接</strong>（含相同
-          <code>?room=</code>），等状态变为「中继已连接」后再拖动物体。<br />
-          同浏览器多标签、不同浏览器、手机/Mac 都可；不要只看本机预览地址是否一致，房间名必须一致。<br />
+          请先在 <code>firebase-config.js</code> 填入 Firebase 配置。<br />
+          跨设备：两边打开同一 <code>?room=</code> 链接，看到「Firebase 已连接」且在线 ≥
+          2 后再拖拽。<br />
           快捷键 <code>G</code>/<code>R</code>/<code>S</code> = 平移/旋转/缩放。
         </p>
       </aside>
@@ -298,12 +279,21 @@
       import { TransformControls } from "three/addons/controls/TransformControls.js";
       import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
       import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-      import * as Y from "yjs";
-      import { WebsocketProvider } from "y-websocket";
+      import { initializeApp } from "firebase/app";
+      import {
+        getDatabase,
+        ref,
+        onValue,
+        set,
+        update,
+        onDisconnect,
+        serverTimestamp,
+      } from "firebase/database";
+      import {
+        firebaseConfig,
+        firebaseConfigured,
+      } from "./firebase-config.js";
 
-      // ---------------------------------------------------------------------------
-      // Shared defaults + demo model catalog (static CDN assets)
-      // ---------------------------------------------------------------------------
       const MODEL_CATALOG = {
         helmet: {
           name: "Damaged Helmet",
@@ -325,22 +315,15 @@
         modelId: "helmet",
       };
 
-      // Public Yjs demo relay. Room is prefixed to avoid colliding with other demos.
-      const WS_SERVER =
-        new URLSearchParams(window.location.search).get("ws") ||
-        "wss://demos.yjs.dev";
-
       const roomFromUrl =
         new URLSearchParams(window.location.search).get("room") ||
         "lketchum-viz-demo";
-      const docRoomName = `lketchum-viz/${roomFromUrl}`;
 
       const roomInput = document.getElementById("roomInput");
       const modelSelect = document.getElementById("modelSelect");
       const colorInput = document.getElementById("colorInput");
       const copyLinkBtn = document.getElementById("copyLinkBtn");
       const resetBtn = document.getElementById("resetBtn");
-      const reconnectBtn = document.getElementById("reconnectBtn");
       const connDot = document.getElementById("connDot");
       const connText = document.getElementById("connText");
       const peerDot = document.getElementById("peerDot");
@@ -353,31 +336,25 @@
       modelSelect.value = DEFAULT_STATE.modelId;
       colorInput.value = DEFAULT_STATE.materialColor;
 
-      /** Prevent local TransformControls from echoing remote updates back into Yjs. */
       let isRemoteUpdate = false;
+      let syncReady = false;
       let currentModelId = DEFAULT_STATE.modelId;
       let loadToken = 0;
+      let latestState = { ...DEFAULT_STATE };
+      let writeTimer = null;
 
-      // ===========================================================================
-      // Phase 1: Yjs & Websocket collaboration bootstrap
-      // Why not y-webrtc alone?
-      // Public WebRTC signaling is often down; same-browser tabs still sync via
-      // BroadcastChannel, but a second Mac/phone needs a reachable relay.
-      // y-websocket -> demos.yjs.dev provides that relay without our own backend.
-      // ===========================================================================
-      const ydoc = new Y.Doc();
-      const yMeshState = ydoc.getMap("meshState");
+      let db = null;
+      let stateRef = null;
+      let presenceRef = null;
+      let presenceListRef = null;
 
-      let provider = null;
-
-      function setConnStatus(connected) {
+      function setConnStatus(connected, text) {
         connDot.classList.toggle("on", connected);
         connDot.classList.toggle("warn", !connected);
-        connText.textContent = connected ? "中继已连接" : "中继断开/重连中";
+        connText.textContent = text;
       }
 
-      function setPeerStatus() {
-        const count = provider?.awareness?.getStates()?.size || 1;
+      function setPeerStatus(count) {
         peerDot.classList.toggle("on", count > 1);
         peerDot.classList.toggle("warn", count <= 1);
         peerText.textContent = `在线: ${count}`;
@@ -394,66 +371,80 @@
         if (text) loadingMask.textContent = text;
       }
 
-      function bindProvider(nextProvider) {
-        if (provider) {
-          try {
-            provider.destroy();
-          } catch (_) {
-            /* ignore */
-          }
+      function getClientId() {
+        const key = "lketchum-viz-client-id";
+        let id = sessionStorage.getItem(key);
+        if (!id) {
+          id = `c_${Math.random().toString(36).slice(2, 10)}`;
+          sessionStorage.setItem(key, id);
         }
-        provider = nextProvider;
-
-        setConnStatus(Boolean(provider.wsconnected));
-        setPeerStatus();
-
-        provider.on("status", (event) => {
-          setConnStatus(event.status === "connected");
-        });
-
-        provider.on("sync", (isSynced) => {
-          if (isSynced) ensureInitialState();
-        });
-
-        provider.awareness.on("change", () => {
-          setPeerStatus();
-        });
-
-        // Mark local presence so remote clients can count peers.
-        provider.awareness.setLocalStateField("user", {
-          name: `user-${Math.floor(Math.random() * 10000)}`,
-          device: navigator.platform || "web",
-          at: Date.now(),
-        });
-      }
-
-      function connectRoom() {
-        const next = new WebsocketProvider(WS_SERVER, docRoomName, ydoc, {
-          connect: true,
-        });
-        bindProvider(next);
-      }
-
-      connectRoom();
-
-      reconnectBtn.addEventListener("click", () => {
-        setConnStatus(false);
-        connectRoom();
-      });
-
-      function ensureInitialState() {
-        if (yMeshState.size > 0) return;
-        ydoc.transact(() => {
-          yMeshState.set("position", DEFAULT_STATE.position);
-          yMeshState.set("rotation", DEFAULT_STATE.rotation);
-          yMeshState.set("scale", DEFAULT_STATE.scale);
-          yMeshState.set("materialColor", DEFAULT_STATE.materialColor);
-          yMeshState.set("modelId", DEFAULT_STATE.modelId);
-        });
+        return id;
       }
 
       // ===========================================================================
-      // Phase 2: Three.js scene / lights / renderer / model root
+      // Phase 1: Firebase Realtime Database bootstrap
+      // ===========================================================================
+      if (!firebaseConfigured) {
+        setConnStatus(false, "请填写 firebase-config.js");
+        setPeerStatus(0);
+      } else {
+        try {
+          const app = initializeApp(firebaseConfig);
+          db = getDatabase(app);
+          stateRef = ref(db, `rooms/${roomFromUrl}/meshState`);
+          presenceListRef = ref(db, `rooms/${roomFromUrl}/presence`);
+          presenceRef = ref(
+            db,
+            `rooms/${roomFromUrl}/presence/${getClientId()}`
+          );
+
+          set(presenceRef, { at: serverTimestamp(), ua: navigator.userAgent.slice(0, 80) });
+          onDisconnect(presenceRef).remove();
+
+          setConnStatus(true, "Firebase 已连接");
+
+          onValue(presenceListRef, (snap) => {
+            const val = snap.val() || {};
+            setPeerStatus(Object.keys(val).length);
+          });
+
+          onValue(stateRef, (snap) => {
+            const data = snap.val();
+            if (!data) {
+              // First peer seeds default state.
+              set(stateRef, DEFAULT_STATE);
+              return;
+            }
+            latestState = {
+              position: data.position || DEFAULT_STATE.position,
+              rotation: data.rotation || DEFAULT_STATE.rotation,
+              scale: data.scale || DEFAULT_STATE.scale,
+              materialColor: data.materialColor || DEFAULT_STATE.materialColor,
+              modelId: data.modelId || DEFAULT_STATE.modelId,
+            };
+            if (syncReady) applyMeshStateFromRemote(latestState);
+          });
+
+          // Connection state via .info/connected
+          onValue(ref(db, ".info/connected"), (snap) => {
+            const ok = snap.val() === true;
+            setConnStatus(ok, ok ? "Firebase 已连接" : "Firebase 断开/重连中");
+            if (ok) {
+              set(presenceRef, {
+                at: serverTimestamp(),
+                ua: navigator.userAgent.slice(0, 80),
+              });
+              onDisconnect(presenceRef).remove();
+            }
+          });
+        } catch (error) {
+          console.error(error);
+          setConnStatus(false, `配置错误: ${error.message || error}`);
+        }
+      }
+
+      // ===========================================================================
+      // Phase 2: Three.js scene
       // ===========================================================================
       const canvas = document.getElementById("viewport");
       const renderer = new THREE.WebGLRenderer({
@@ -473,7 +464,6 @@
       scene.background = new THREE.Color(0x0f1419);
       scene.fog = new THREE.Fog(0x0f1419, 18, 48);
 
-      // PBR models (e.g. DamagedHelmet) need an environment map to be visible.
       const pmrem = new THREE.PMREMGenerator(renderer);
       scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
       pmrem.dispose();
@@ -486,16 +476,11 @@
       );
       camera.position.set(4.5, 3.4, 5.6);
 
-      const ambient = new THREE.AmbientLight(0xffffff, 0.35);
-      scene.add(ambient);
-
-      const hemi = new THREE.HemisphereLight(0xbcd7ff, 0x1a222c, 0.9);
-      scene.add(hemi);
-
+      scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+      scene.add(new THREE.HemisphereLight(0xbcd7ff, 0x1a222c, 0.9));
       const dir = new THREE.DirectionalLight(0xffffff, 1.6);
       dir.position.set(5, 8, 3);
       dir.castShadow = true;
-      dir.shadow.mapSize.set(1024, 1024);
       scene.add(dir);
 
       const ground = new THREE.Mesh(
@@ -516,9 +501,7 @@
       grid.material.transparent = true;
       scene.add(grid);
 
-      // Sync root: TransformControls + Yjs operate on this group, not camera.
       const modelRoot = new THREE.Group();
-      modelRoot.name = "syncRoot";
       scene.add(modelRoot);
 
       const gltfLoader = new GLTFLoader();
@@ -538,14 +521,10 @@
           const child = modelRoot.children[0];
           modelRoot.remove(child);
           child.traverse((obj) => {
-            if (obj.isMesh) {
-              obj.geometry?.dispose?.();
-              if (Array.isArray(obj.material)) {
-                obj.material.forEach((m) => m.dispose?.());
-              } else {
-                obj.material?.dispose?.();
-              }
-            }
+            if (!obj.isMesh) return;
+            obj.geometry?.dispose?.();
+            if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose?.());
+            else obj.material?.dispose?.();
           });
         }
         editableMaterials.length = 0;
@@ -558,11 +537,9 @@
         const center = box.getCenter(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z) || 1;
         const s = targetSize / maxDim;
-
         object3d.position.sub(center);
         object3d.scale.setScalar(s);
         object3d.updateMatrixWorld(true);
-
         const fitted = new THREE.Box3().setFromObject(object3d);
         object3d.position.y -= fitted.min.y;
       }
@@ -574,7 +551,7 @@
           obj.receiveShadow = true;
           const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
           mats.forEach((mat) => {
-            if (mat && mat.color) editableMaterials.push(mat);
+            if (mat?.color) editableMaterials.push(mat);
           });
         });
       }
@@ -595,7 +572,6 @@
           })
         );
         mesh.castShadow = true;
-        mesh.receiveShadow = true;
         mesh.position.y = 0.7;
         return mesh;
       }
@@ -603,10 +579,8 @@
       async function loadModel(modelId) {
         const token = ++loadToken;
         const meta = MODEL_CATALOG[modelId] || MODEL_CATALOG.helmet;
-        const nextId = modelId in MODEL_CATALOG ? modelId : "helmet";
-        currentModelId = nextId;
+        currentModelId = modelId in MODEL_CATALOG ? modelId : "helmet";
         modelSelect.value = currentModelId;
-
         setLoading(true, `正在加载 ${meta.name}…`);
         setModelStatus(`加载中: ${meta.name}`, false);
         clearModelContent();
@@ -614,138 +588,102 @@
         try {
           const gltf = await gltfLoader.loadAsync(meta.url);
           if (token !== loadToken) return false;
-
           const model = gltf.scene;
           fitObjectToSize(model, meta.targetSize);
           collectMaterials(model);
           modelRoot.add(model);
-
-          const tint =
-            yMeshState.get("materialColor") || DEFAULT_STATE.materialColor;
-          applyTint(tint);
+          applyTint(latestState.materialColor || DEFAULT_STATE.materialColor);
           setModelStatus(`已加载: ${meta.name}`, true);
           return true;
         } catch (error) {
-          console.error("Model load failed, fallback to box:", error);
+          console.error(error);
           if (token !== loadToken) return false;
-
           const fallback = createFallbackMesh();
           collectMaterials(fallback);
           modelRoot.add(fallback);
-          applyTint(
-            yMeshState.get("materialColor") || DEFAULT_STATE.materialColor
-          );
-          setModelStatus("CDN 失败，已用立方体兜底", false);
+          applyTint(latestState.materialColor || DEFAULT_STATE.materialColor);
+          setModelStatus("模型加载失败，已用立方体兜底", false);
           return true;
         } finally {
           if (token === loadToken) setLoading(false);
         }
       }
 
-      // Mode hotkeys: g translate / r rotate / s scale
       window.addEventListener("keydown", (event) => {
         if (event.target && ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)) {
           return;
         }
-        switch (event.key.toLowerCase()) {
-          case "g":
-            transform.setMode("translate");
-            break;
-          case "r":
-            transform.setMode("rotate");
-            break;
-          case "s":
-            transform.setMode("scale");
-            break;
-          default:
-            break;
-        }
+        const key = event.key.toLowerCase();
+        if (key === "g") transform.setMode("translate");
+        if (key === "r") transform.setMode("rotate");
+        if (key === "s") transform.setMode("scale");
       });
 
       // ===========================================================================
-      // Phase 3: TransformControls -> Yjs write (Local -> Remote)
+      // Phase 3: Local edits -> Firebase
       // ===========================================================================
-      function writeMeshStateToYjs() {
-        if (isRemoteUpdate) return;
+      function writeMeshStateToFirebase(immediate = false) {
+        if (isRemoteUpdate || !stateRef) return;
 
-        const position = modelRoot.position.toArray();
-        const rotation = [
-          modelRoot.rotation.x,
-          modelRoot.rotation.y,
-          modelRoot.rotation.z,
-        ];
-        const scale = modelRoot.scale.toArray();
-        const materialColor = colorInput.value || DEFAULT_STATE.materialColor;
+        const payload = {
+          position: modelRoot.position.toArray(),
+          rotation: [
+            modelRoot.rotation.x,
+            modelRoot.rotation.y,
+            modelRoot.rotation.z,
+          ],
+          scale: modelRoot.scale.toArray(),
+          materialColor: colorInput.value || DEFAULT_STATE.materialColor,
+          modelId: currentModelId,
+        };
+        latestState = payload;
 
-        ydoc.transact(() => {
-          yMeshState.set("position", position);
-          yMeshState.set("rotation", rotation);
-          yMeshState.set("scale", scale);
-          yMeshState.set("materialColor", materialColor);
-          yMeshState.set("modelId", currentModelId);
-        });
+        const flush = () => set(stateRef, payload);
+        if (immediate) {
+          if (writeTimer) clearTimeout(writeTimer);
+          writeTimer = null;
+          flush();
+          return;
+        }
+        if (writeTimer) return;
+        writeTimer = setTimeout(() => {
+          writeTimer = null;
+          flush();
+        }, 50);
       }
 
       transform.addEventListener("dragging-changed", (event) => {
         orbit.enabled = !event.value;
-        if (!event.value) writeMeshStateToYjs();
+        if (!event.value) writeMeshStateToFirebase(true);
       });
 
       transform.addEventListener("objectChange", () => {
-        writeMeshStateToYjs();
+        writeMeshStateToFirebase(false);
       });
 
       colorInput.addEventListener("input", () => {
         if (isRemoteUpdate) return;
         applyTint(colorInput.value);
-        writeMeshStateToYjs();
+        writeMeshStateToFirebase(true);
       });
 
       modelSelect.addEventListener("change", async () => {
         if (isRemoteUpdate) return;
         currentModelId = modelSelect.value;
         await loadModel(currentModelId);
-        writeMeshStateToYjs();
+        writeMeshStateToFirebase(true);
       });
 
       resetBtn.addEventListener("click", () => {
-        if (isRemoteUpdate) return;
-        ydoc.transact(() => {
-          yMeshState.set("position", [...DEFAULT_STATE.position]);
-          yMeshState.set("rotation", [...DEFAULT_STATE.rotation]);
-          yMeshState.set("scale", [...DEFAULT_STATE.scale]);
-          yMeshState.set("materialColor", DEFAULT_STATE.materialColor);
-          yMeshState.set("modelId", DEFAULT_STATE.modelId);
-        });
+        if (isRemoteUpdate || !stateRef) return;
+        set(stateRef, { ...DEFAULT_STATE });
       });
 
       // ===========================================================================
-      // Phase 4: Yjs observe -> Three.js state update (Remote -> Local)
+      // Phase 4: Firebase -> local Three.js
       // ===========================================================================
-      let syncReady = false;
-
-      function applyTransformFromYjs() {
-        const position = yMeshState.get("position") || DEFAULT_STATE.position;
-        const rotation = yMeshState.get("rotation") || DEFAULT_STATE.rotation;
-        const scale = yMeshState.get("scale") || DEFAULT_STATE.scale;
-        const materialColor =
-          yMeshState.get("materialColor") || DEFAULT_STATE.materialColor;
-
-        isRemoteUpdate = true;
-        try {
-          modelRoot.position.fromArray(position);
-          modelRoot.rotation.set(rotation[0], rotation[1], rotation[2]);
-          modelRoot.scale.fromArray(scale);
-          applyTint(materialColor);
-          modelRoot.updateMatrixWorld(true);
-        } finally {
-          isRemoteUpdate = false;
-        }
-      }
-
-      async function applyMeshStateFromYjs() {
-        if (!syncReady) return;
-        const nextModelId = yMeshState.get("modelId") || DEFAULT_STATE.modelId;
+      async function applyMeshStateFromRemote(state) {
+        const nextModelId = state.modelId || DEFAULT_STATE.modelId;
         if (nextModelId !== currentModelId) {
           isRemoteUpdate = true;
           try {
@@ -754,59 +692,32 @@
             isRemoteUpdate = false;
           }
         }
-        applyTransformFromYjs();
+
+        isRemoteUpdate = true;
+        try {
+          modelRoot.position.fromArray(state.position || DEFAULT_STATE.position);
+          const rotation = state.rotation || DEFAULT_STATE.rotation;
+          modelRoot.rotation.set(rotation[0], rotation[1], rotation[2]);
+          modelRoot.scale.fromArray(state.scale || DEFAULT_STATE.scale);
+          applyTint(state.materialColor || DEFAULT_STATE.materialColor);
+          modelRoot.updateMatrixWorld(true);
+        } finally {
+          isRemoteUpdate = false;
+        }
       }
 
-      yMeshState.observe(() => {
-        applyMeshStateFromYjs();
-      });
-
-      // Initial model first; enable remote sync afterwards to avoid concurrent loads.
-      try {
-        await loadModel(yMeshState.get("modelId") || DEFAULT_STATE.modelId);
-        applyTransformFromYjs();
-        syncReady = true;
-      } catch (error) {
-        console.error(error);
-        setModelStatus(`初始化失败: ${error?.message || error}`, false);
-      }
-
-      window.__vizDebug = {
-        scene,
-        camera,
-        renderer,
-        modelRoot,
-        info() {
-          const box = new THREE.Box3().setFromObject(modelRoot);
-          return {
-            children: modelRoot.children.length,
-            meshCount: (() => {
-              let n = 0;
-              modelRoot.traverse((o) => {
-                if (o.isMesh) n += 1;
-              });
-              return n;
-            })(),
-            rootPos: modelRoot.position.toArray(),
-            rootScale: modelRoot.scale.toArray(),
-            boxMin: box.min.toArray(),
-            boxMax: box.max.toArray(),
-            camPos: camera.position.toArray(),
-          };
-        },
-      };
+      await loadModel(DEFAULT_STATE.modelId);
+      syncReady = true;
+      if (latestState) await applyMeshStateFromRemote(latestState);
 
       // ===========================================================================
-      // Phase 5: Render loop & resize
+      // Phase 5: Render loop & helpers
       // ===========================================================================
       function onResize() {
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-        camera.aspect = width / height;
+        camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
-        renderer.setSize(width, height);
+        renderer.setSize(window.innerWidth, window.innerHeight);
       }
-
       window.addEventListener("resize", onResize);
 
       function animate() {
@@ -814,12 +725,8 @@
         orbit.update();
         renderer.render(scene, camera);
       }
-
       animate();
 
-      // ---------------------------------------------------------------------------
-      // Room / share helpers
-      // ---------------------------------------------------------------------------
       function navigateToRoom(room) {
         const next = room.trim() || "lketchum-viz-demo";
         const url = new URL(window.location.href);
@@ -830,11 +737,8 @@
       roomInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") navigateToRoom(roomInput.value);
       });
-
       roomInput.addEventListener("change", () => {
-        if (roomInput.value.trim() !== roomFromUrl) {
-          navigateToRoom(roomInput.value);
-        }
+        if (roomInput.value.trim() !== roomFromUrl) navigateToRoom(roomInput.value);
       });
 
       copyLinkBtn.addEventListener("click", async () => {
@@ -847,17 +751,8 @@
             copyLinkBtn.textContent = "复制链接";
           }, 1200);
         } catch {
-          prompt("复制下面的协同链接：", url.toString());
+          prompt("复制协同链接：", url.toString());
         }
-      });
-
-      window.addEventListener("beforeunload", () => {
-        try {
-          provider?.destroy();
-        } catch (_) {
-          /* ignore */
-        }
-        ydoc.destroy();
       });
     </script>
   </body>
