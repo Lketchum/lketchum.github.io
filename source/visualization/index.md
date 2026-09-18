@@ -18,6 +18,16 @@ toc: false
 - 仅同步 `position / rotation / scale / color / modelId`，不同步相机
 - 两边打开同一 `?room=` 链接，看到「Firebase 已连接」且在线 ≥ 2 即可验证
 
+**[三维算法实验室](/visualization/algorithm-lab/)**（工业标注 / 剖切 / 空间索引）
+
+- 建筑结构由梁、柱、楼板和核心筒等独立构件组成，支持构件选择与高亮
+- 工业标注绑定构件 ID、局部锚点、表面法线和三角面索引
+- 支持标注编辑、删除、本地持久化及 JSON 导入/导出
+- 标注按 `rooms/{room}/industrialAnnotations/{annotationId}` 存储，并通过 Firebase 多端实时同步
+- 同时展示剖切/截面和体素空间索引
+- 适合用于项目演示、面试陈述和技术验证
+- 不依赖后端，使用纯前端 Three.js 方案，便于演示和复现
+
 相关文章：
 
 - [实作：GitHub Pages 上的 Web 3D 协同编辑器](/2026/03/26/实作-GitHub-Pages-Web3D协同编辑器/)
