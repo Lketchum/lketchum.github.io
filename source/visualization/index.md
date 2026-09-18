@@ -1,7 +1,7 @@
 ---
 title: 三维可视化开发
 date: 2026-03-26 21:00:00
-updated: 2026-03-26 22:50:00
+updated: 2026-03-27 10:00:00
 type: page
 comments: false
 toc: false
@@ -11,12 +11,17 @@ toc: false
 
 ## 在线演示
 
-**[Web 3D 协同同步编辑器](/visualization/editor/)**（Three.js + Yjs + y-webrtc）
+**[Web 3D 协同同步编辑器](/visualization/editor/)**（Three.js + Firebase）
 
-- 纯静态页面 + 公共 Yjs 中继，跨电脑可协同（需两边「中继已连接」）
-- 仅同步物体 `position / rotation / scale / color / modelId`，不同步相机
-- 打开两个浏览器（或 Mac/手机），同一 `?room=` 链接即可实时协同
-- 原理文章：[Web 端多端协同如何在无后端下工作](/2026/03/27/原理详解-Web端多端协同如何在无后端下工作/)
+- 页面与 glTF 模型托管在 GitHub Pages（纯静态）
+- 物体状态经 Firebase Realtime Database 跨设备同步
+- 仅同步 `position / rotation / scale / color / modelId`，不同步相机
+- 两边打开同一 `?room=` 链接，看到「Firebase 已连接」且在线 ≥ 2 即可验证
+
+相关文章：
+
+- [实作：GitHub Pages 上的 Web 3D 协同编辑器](/2026/03/26/实作-GitHub-Pages-Web3D协同编辑器/)
+- [原理详解：Web 端多端协同如何在无后端下工作](/2026/03/27/原理详解-Web端多端协同如何在无后端下工作/)
 
 ## 写作目标
 

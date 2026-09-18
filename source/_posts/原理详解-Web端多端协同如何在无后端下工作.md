@@ -1,268 +1,162 @@
 ---
 title: 原理详解：Web 端多端协同如何在无后端下工作
 date: 2026-03-27 08:00:00
+updated: 2026-03-27 10:00:00
 categories: 三维可视化开发
 tags:
-  - Yjs
-  - CRDT
-  - WebRTC
-  - 协同编辑
+  - Firebase
   - Three.js
+  - 协同编辑
+  - Realtime Database
+  - glTF
 ---
 
 本文对应演示页：[Web 3D 协同同步编辑器](/visualization/editor/)。  
-目标不是“再写一遍用法”，而是把 **多端协同在纯静态站点上为什么可行、数据怎么走、冲突怎么解、为什么不会死循环** 讲清楚，方便面试时按链路口述。
+目标是把 **多端协同在 GitHub Pages 静态站上如何落地** 讲清楚：同步什么、不传什么、数据怎么走、为何不自建服务器，以及如何跨电脑稳定验证。  
+（这里的「无后端」指 **无自建 Node 房间服**；实时存储使用 Firebase 托管服务。）
 
 <!-- more -->
 
 ## 如何验证多端协同
 
-可以，而且很直接：
-
-1. 两边都打开**线上同一地址**（推荐 GitHub Pages，不要一边 localhost、一边另一台机器却进了不同页面）
-2. 确认房间名完全一致（例如都用 `?room=demo-room`），可点「复制链接」发给另一台
-3. 等待状态显示 **「中继已连接」**，且 **「在线」≥ 2**
+1. 两边打开**同一链接**（推荐已部署的 GitHub Pages；房间名用 `?room=` 保持一致）
+2. 左上角状态显示 **「Firebase 已连接」**
+3. **「在线」≥ 2**（presence 人数）
 4. 一侧拖拽坐标轴 / 改颜色 / 切模型，另一侧应跟上
-5. 两侧分别转视角：物体一致，相机互不影响
+5. 两侧分别转视角：物体一致，**相机互不影响**
 
-### 为什么「本机两个标签行，换 Mac 就不行」
+### 演进说明（面试可讲取舍）
 
-旧版用 `y-webrtc` 时：
+| 版本 | 传输方式 | 问题 |
+| --- | --- | --- |
+| 初版 | y-webrtc 公共信令 | 同浏览器标签页常能通；换 Mac 经常失败 |
+| 过渡 | y-websocket + 公共 demo 中继 | 仍依赖不稳定的公共服务，「在线」常为 1 |
+| **当前** | **Firebase Realtime Database** | 不自建服务器，跨设备更稳 |
 
-- **同浏览器多标签** 往往靠 `BroadcastChannel` 就能通（不依赖公网信令）
-- **换一台 Mac** 必须走 WebRTC，还要公共 **signaling** 帮两边互相发现  
-  而 Yjs 默认公共信令经常不稳定/不可用，于是跨设备会表现为“完全不同步”
-
-当前版本已改为 **`y-websocket` + 公共中继 `wss://demos.yjs.dev`**：  
-状态经中继转发，跨电脑/跨网络更稳；CRDT 合并与 `isRemoteUpdate` 防环逻辑不变。
-
-若仍不同步，按下面排查：
-
-1. 两边是否都显示「中继已连接」
-2. 房间名是否一字不差
-3. 是否都打开了**已部署的最新页面**（旧缓存可能还是 webrtc 版）
-4. 网络是否拦截 WebSocket（部分公司网）——可点「重新连接」或换手机热点再试
+结论：**表现层与状态结构设计可复用；跨设备稳定性取决于传输层是否可控。**
 
 ## 一句话架构
 
-> **每个客户端各自渲染 3D；协同层只同步一份可合并的状态文档。**
+> **GitHub Pages 托管页面与模型；Firebase 只存一份小 JSON 状态；各端各自用 Three.js 渲染。**
 
-拆开就是三层：
+```text
+浏览器 A（Three.js）                 浏览器 B（Three.js）
+      │                                    │
+      │  写/听 meshState JSON               │
+      └──────────► Firebase RTDB ◄──────────┘
+                   rooms/{room}/...
+```
 
 | 层 | 技术 | 职责 |
 | --- | --- | --- |
-| 表现层 | Three.js + OrbitControls + TransformControls | 本地渲染、拾取、编辑、独立相机 |
-| 状态层 | Yjs `Y.Map`（CRDT） | 保存可合并的共享状态 |
-| 传输层 | y-websocket（公共中继） | 把文档增量送达同房间客户端 |
+| 表现层 | Three.js + OrbitControls + TransformControls | 本地渲染、编辑、独立相机 |
+| 状态层 | `meshState` JSON | position / rotation / scale / color / modelId |
+| 传输层 | Firebase Realtime Database | 路径监听与多端推送 |
+| 托管层 | GitHub Pages | `index.html` + `.glb` 静态资源 |
 
-GitHub Pages 只托管 `index.html` 和 `.glb`，**不托管房间服务器、不托管数据库**。
+注意：网站**不必**部署到 Firebase Hosting；Firebase 在这里只当数据库。
 
-## 为什么“无后端”也能协同
+## 为什么不必自建 Node 服务器
 
-常见协同有两条路：
+静态站缺的是「有状态、可推送的共享存储」，不是「再买一台 VPS」。
 
-1. **中心化**：客户端 → 你的服务器 → 广播给其他人  
-2. **去中心化**：客户端彼此同步，服务器最多只做“介绍认识”（信令）
+- **GitHub Pages**：负责 HTML/JS/模型文件  
+- **Firebase**：负责 `rooms/{roomId}/meshState` 的读写与实时回调  
+- 业务上仍然 **不传 Mesh 二进制**，信道压力很小  
 
-本项目走第 2 条：
-
-- **Yjs** 让每端都有完整文档副本，并用 CRDT 保证最终一致
-- **y-websocket** 把增量发到中继，再转发给同房间其他人  
-  （早期 demo 也曾用 y-webrtc；但公共 WebRTC 信令不稳定，跨设备易失败，因此改为中继）
-- 我们仍然**不自建业务数据库**：中继只转发 update，不理解 3D 业务含义
-
-因此静态托管足够：缺的不是“网页服务器”，而是“有状态的业务后端”；而业务状态被 CRDT 文档本身承担了。
+这和「评论系统用 GitHub Issues / Giscus」是同一类思路：静态页 + 托管后端能力。
 
 ## 同步什么，不同步什么
 
-### 同步（进入 `meshState`）
+### 同步（写入 Firebase）
 
 ```text
-meshState (Y.Map)
+rooms/{room}/meshState
 ├─ position: [x, y, z]
 ├─ rotation: [x, y, z]
 ├─ scale:    [x, y, z]
 ├─ materialColor: "#rrggbb"
 └─ modelId: "helmet" | "duck"
-```
 
-设计原则：**禁止在协同信道里传 Mesh 二进制**。  
-模型文件各端本地加载（`./models/*.glb`）；信道只传“选了哪个模型 + 变换/颜色”。
+rooms/{room}/presence/{clientId}
+└─ at / ua   # 仅用于在线人数
+```
 
 ### 不同步
 
-- 相机 pose（位置、朝向、OrbitControls target）
-- 帧率、渲染参数、UI 面板开合
-- glTF 几何与贴图本体
+- 相机位置与 OrbitControls target  
+- glTF 几何与贴图（各端本地加载 `./models/*.glb`）  
+- UI 面板状态  
 
-这样多人可以围着同一物体讨论，而不会出现“你一转视角，我的屏幕也被拽走”。
+## 数据流
 
-## 数据流：本地修改如何到达远端
+### 本地 → Firebase
 
 ```text
-用户拖拽 TransformControls
-        │
-        ▼
-objectChange / dragging-changed
-        │
-        ▼
-读取 modelRoot.position/rotation/scale
-写入 yMeshState（Y.Map）
-        │
-        ▼
-Yjs 生成 document update（增量）
-        │
-        ▼
-y-websocket 发到中继，再转发给同房间 peers
-        │
-        ▼
-对端 yMeshState.observe()
-        │
-        ▼
-更新对端 modelRoot（不改对端相机）
+拖拽 TransformControls
+    → 读取 modelRoot TRS
+    → set(rooms/{room}/meshState, json)   # 拖拽中节流，松手立即写
 ```
 
-关键点：
+### Firebase → 本地
 
-1. **写入的是状态，不是操作录像**  
-   远端不需要重放“拖了 120 帧”，只要最终（以及中间采样）状态一致。
-
-2. **拖拽过程中持续写入**  
-   用 `objectChange` 流式更新，观感接近实时；松手时再保证一次提交。
-
-3. 房间名 = 文档隔离键  
-   `new WebsocketProvider(server, 'lketchum-viz/' + roomName, ydoc)` 中，同名房间才会互通。
-
-## 反向流：远端更新如何应用到本地
-
-```js
-yMeshState.observe(() => {
-  // 1) 如 modelId 变化，先切换本地模型
-  // 2) 再应用 position/rotation/scale/color
-});
+```text
+onValue(meshState)
+    → 若 modelId 变化：GLTFLoader 换模
+    → 应用 position/rotation/scale/color 到 modelRoot
+    → 不改相机
 ```
 
-这里有两个实现细节：
+### 在线人数
 
-### 1. 模型切换与变换解耦
-
-- `modelId` 变化 → `GLTFLoader` 加载对应 glb  
-- 变换字段变化 → 只改 `modelRoot` 的 TRS  
-
-同步根节点是 `Group`（`modelRoot`），真正 glTF 场景是它的子节点。这样换模型不会把“协同坐标系”搞乱。
-
-### 2. 初始化完成后才接收远端
-
-若一进页就 `observe`，又同时 `await loadModel()`，容易出现 **并发加载互相取消**（token 抢占）。  
-因此用 `syncReady`：本地首模加载完成后再处理远端 observe。
-
-## 冲突怎么解决：CRDT 在这里的角色
-
-多人同时拖同一物体时，传统做法常是：
-
-- 加锁（谁持有编辑权）  
-- 或服务器最后写入覆盖  
-
-Yjs 的 `Y.Map` 属于 CRDT 家族：每个更新都带因果/并发信息，副本之间交换后能收敛到同一结果，**不需要中心锁**。
-
-对本项目的直观理解：
-
-- 你改 `position`，我几乎同时改 `rotation` → 合并后两者都在  
-- 两人同时改 `position` → 按 CRDT 规则收敛到一致值（可能不是“算术平均”，而是可确定的合并结果）
-
-面试时可以说：
-
-> 协同的一致性不靠后端锁，而靠状态副本的可交换合并；传输层只负责把 update 送达。
+```text
+set(presence/{clientId})
+onDisconnect(...).remove()
+onValue(presence) → 统计 key 数量
+```
 
 ## 防死循环：`isRemoteUpdate`
 
-最容易踩的坑：
-
 ```text
-本地拖拽 → 写 Yjs → 自己又 observe 到 → 再写 Yjs → 环路/抖动
+本地拖拽 → 写 Firebase → onValue 回调到自己
+若回调里再触发写回 → 抖动/环路
 ```
 
-或：
+做法：
 
-```text
-远端更新 → 改 Mesh → 触发 controls change → 再写回 Yjs → 来回拉锯
-```
+- 远端应用状态时：`isRemoteUpdate = true`  
+- 此期间禁止 `writeMeshStateToFirebase`  
+- 应用结束后复位标志  
 
-解法是单方向闸门：
+这是 UI 事件与同步事件的隔离，和用不用 Yjs 无关。
 
-```text
-本地用户操作：
-  isRemoteUpdate === false 时，才允许 writeMeshStateToYjs()
+## 相机为何解耦
 
-远端 observe：
-  isRemoteUpdate = true
-  应用 TRS / 颜色
-  isRemoteUpdate = false
-```
+OrbitControls =「我怎么看」；TransformControls =「物体怎么被改」。  
+只同步物体状态，多人才能各自绕物体观察，而不会被对方视角拖走。
 
-这不是分布式算法，而是 **UI 事件与同步事件的隔离**。几乎所有“可视化 + 文档同步”系统都会有等价机制。
-
-## 相机为何必须解耦
-
-OrbitControls 管的是“我如何看”，TransformControls 管的是“世界里物体如何被改”。
-
-若同步相机：
-
-- 体验上变成强制观影  
-- 网络抖动会直接造成眩晕感  
-- 冲突语义也不清晰（视角不是业务对象）
-
-所以共享态只覆盖 **scene object state**，不覆盖 **view state**。
-
-## 传输层说明：为什么改用 WebSocket 中继
-
-`y-webrtc` 的理想路径是 P2P：信令只负责“介绍”，数据直连。  
-但对个人博客演示很不友好：
-
-1. 公共 signaling 经常挂  
-2. 跨 NAT / 运营商网络还可能需要 TURN  
-3. 结果就是：**同电脑标签页能同步，换 Mac 不能**
-
-因此演示改为：
-
-```text
-浏览器 A ──WSS──▶ demos.yjs.dev ──WSS──▶ 浏览器 B
-```
-
-代价是依赖公共中继可用性；收益是跨设备成功率明显高于纯公共 WebRTC。  
-若以后要完全自主，可自建 `y-websocket` 服务或私有 signaling，业务层代码几乎不用改。
-
-## 和“模型加载”的关系
-
-协同并不负责“把模型文件发过去”：
+## 模型加载与协同的分工
 
 - 静态站提供 `DamagedHelmet.glb` / `Duck.glb`  
-- 各端按 `modelId` 自己加载  
-- 加载完成后套上共享 TRS  
+- 协同只传 `modelId` + TRS  
+- 换模后仍挂在同一 `modelRoot` 上，坐标系不乱  
 
-收益：
+## 安全说明（演示项目）
 
-- 带宽小（状态是字节级/百字节级更新）  
-- 可缓存  
-- 信道更稳  
+当前可用测试规则（公开读写）方便演示；上线长期站点应改为鉴权或房间级规则，避免被刷写。  
+Web 端 `apiKey` 本来就会暴露在前端，防护主要靠 **Database Rules**，不是藏 key。
 
-代价：
+## 面试口述（1 分钟）
 
-- 各端必须能访问同一套模型资源  
-- 新增模型要同时发资源与 `modelId` 约定  
+1. 我在 GitHub Pages 上做了 Web 3D 协同编辑器  
+2. Three.js 负责渲染与编辑；共享态是一份小 JSON  
+3. 用 Firebase Realtime Database 做跨设备实时同步，不自建服务器  
+4. 只同步 TRS/颜色/模型 ID，不同步相机和 Mesh  
+5. 用 `isRemoteUpdate` 防止回写环路；模型本地加载以控制带宽  
 
-## 面试时可怎么讲（1 分钟版）
-
-1. 我在静态站上做了个 Web 3D 协同编辑器  
-2. Three.js 负责本地渲染与编辑；Yjs 存共享物体状态；y-websocket 经中继同步到各端  
-3. 只同步 TRS/颜色/模型 ID，不同步相机和 Mesh 二进制  
-4. 用 `isRemoteUpdate` 防止本地与远端事件环路  
-5. 一致性交给 CRDT；跨设备稳定性依赖可达的中继，而不是自建业务库  
-
-## 相关演示与代码入口
+## 相关入口
 
 - 演示：[Web 3D 协同同步编辑器](/visualization/editor/)  
-- 实作速览：[实作：GitHub Pages 上的 Web 3D 协同编辑器](/2026/03/26/实作-GitHub-Pages-Web3D协同编辑器/)  
-- 源码单文件：`source/visualization/editor/index.html`
-
-后续若继续深化，可以往这些方向扩展：多人光标/选中态、操作撤销栈（Yjs UndoManager）、权威端校验、自建信令与 TURN。
+- 实作：[实作：GitHub Pages 上的 Web 3D 协同编辑器](/2026/03/26/实作-GitHub-Pages-Web3D协同编辑器/)  
+- 专栏：[三维可视化开发](/visualization/)  
+- 代码：`source/visualization/editor/index.html` + `firebase-config.js`
