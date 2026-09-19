@@ -2,6 +2,23 @@
 
 这是一个基于 Hexo 的个人博客项目，使用 npm 管理依赖，并通过 Hexo 生成/预览静态站点。
 
+**内容规划与进度**：见 [BACKLOG.md](./BACKLOG.md)（已完成总结 + 欲开发 backlog）。
+
+## 站点结构（三专栏）
+
+| 专栏 | 入口 | 方向 |
+| --- | --- | --- |
+| 三维可视化 | `/visualization/` | Web 3D、协同编辑、算法 lab |
+| 金融高性能 | `/finance/` | 低延迟、并发、可靠性（C#/.NET） |
+| 开发随笔 | `/notes/` | 排查复盘、工具与选型 |
+
+本地演示（需 `npm run server`）：
+
+- 协同编辑器：http://localhost:4000/visualization/editor/
+- 算法实验室：http://localhost:4000/visualization/algorithm-lab/
+
+> 协同跨设备依赖 Firebase Realtime Database；页面仍部署在 GitHub Pages，不必使用 Firebase Hosting。
+
 ## 1. 安装依赖
 
 在项目根目录执行：
