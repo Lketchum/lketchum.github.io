@@ -1,54 +1,95 @@
 ---
 title: 三维可视化开发
 date: 2026-03-26 21:00:00
-updated: 2026-03-27 10:00:00
+updated: 2026-09-19 14:00:00
 type: page
 comments: false
 toc: false
 ---
 
-本专栏聚焦 **三维可视化工程能力**：从渲染管线、场景组织到交互与性能优化，沉淀可复述、可展示的项目经验。
+本专栏以项目为入口组织三维能力证据：已完成内容直接进入 Demo 或详情页，规划项目进入公开蓝图。状态标签只表示当前进度，不把规划包装成已经具备的能力。
 
-## 在线演示
+## 核心项目
 
-**[Web 3D 协同同步编辑器](/visualization/editor/)**（Three.js + Firebase）
+<div class="visual-card-grid visual-card-grid--primary">
+  <a class="visual-card visual-card--active" href="/visualization/ct3d/">
+    <div class="visual-card__header">
+      <span class="visual-card__eyebrow">Medical Volume Visualization</span>
+      <span class="project-status project-status--active">持续验证</span>
+    </div>
+    <h3>CT3D 医疗体数据可视化</h3>
+    <p>DICOM → HU → MPR/Oblique/Slab，从 MATLAB 原理验证到 C# .NET 8 WPF 工程实现。</p>
+    <div class="visual-card__tags">
+      <span>MATLAB</span><span>C#</span><span>DICOM</span><span>MPR</span>
+    </div>
+    <strong class="visual-card__action">查看项目证据 →</strong>
+  </a>
 
-- 页面与 glTF 模型托管在 GitHub Pages（纯静态）
-- 物体状态经 Firebase Realtime Database 跨设备同步
-- 仅同步 `position / rotation / scale / color / modelId`，不同步相机
-- 两边打开同一 `?room=` 链接，看到「Firebase 已连接」且在线 ≥ 2 即可验证
+  <a class="visual-card" href="/visualization/industrial-geometry-pipeline/">
+    <div class="visual-card__header">
+      <span class="visual-card__eyebrow">Flagship Project</span>
+      <span class="project-status project-status--planned">规划中</span>
+    </div>
+    <h3>Industrial 3D Geometry Pipeline</h3>
+    <p>STEP/B-Rep、三角化、自研 BVH、C# 服务与 Three.js 展示组成的工业三维端到端管线。</p>
+    <div class="visual-card__tags">
+      <span>C++</span><span>Open CASCADE</span><span>BVH</span><span>Three.js</span>
+    </div>
+    <strong class="visual-card__action">查看项目蓝图 →</strong>
+  </a>
 
-**[三维算法实验室](/visualization/algorithm-lab/)**（工业标注 / 剖切 / 空间索引）
+  <a class="visual-card" href="/visualization/gpu-volume-ray-casting/">
+    <div class="visual-card__header">
+      <span class="visual-card__eyebrow">Deep Project</span>
+      <span class="project-status project-status--planned">规划中</span>
+    </div>
+    <h3>GPU Volume Ray Casting</h3>
+    <p>CPU reference 与 CUDA renderer 对照，验证采样、合成、图像误差和 GPU 加速效果。</p>
+    <div class="visual-card__tags">
+      <span>C++</span><span>CUDA</span><span>Ray Casting</span><span>Benchmark</span>
+    </div>
+    <strong class="visual-card__action">查看项目蓝图 →</strong>
+  </a>
+</div>
 
-- 建筑结构由梁、柱、楼板和核心筒等独立构件组成，支持构件选择与高亮
-- 工业标注绑定构件 ID、局部锚点、表面法线和三角面索引
-- 支持标注编辑、删除、本地持久化及 JSON 导入/导出
-- 标注按 `rooms/{room}/industrialAnnotations/{annotationId}` 存储，并通过 Firebase 多端实时同步
-- 同时展示剖切/截面和体素空间索引
-- 适合用于项目演示、面试陈述和技术验证
-- 不依赖后端，使用纯前端 Three.js 方案，便于演示和复现
+## Web3D 在线实验
 
-相关文章：
+<div class="visual-card-grid">
+  <a class="visual-card visual-card--compact" href="/visualization/algorithm-lab/">
+    <div class="visual-card__header">
+      <span class="visual-card__eyebrow">Interactive Demo</span>
+      <span class="project-status project-status--stable">在线演示</span>
+    </div>
+    <h3>三维算法实验室</h3>
+    <p>工业构件标注、剖切、体素空间索引和 Firebase 多端同步。</p>
+    <strong class="visual-card__action">打开 Demo →</strong>
+  </a>
 
-- [实作：GitHub Pages 上的 Web 3D 协同编辑器](/2026/03/26/实作-GitHub-Pages-Web3D协同编辑器/)
-- [原理详解：Web 端多端协同如何在无后端下工作](/2026/03/27/原理详解-Web端多端协同如何在无后端下工作/)
+  <a class="visual-card visual-card--compact" href="/visualization/editor/">
+    <div class="visual-card__header">
+      <span class="visual-card__eyebrow">Collaborative Web3D</span>
+      <span class="project-status project-status--stable">在线演示</span>
+    </div>
+    <h3>Web 3D 协同编辑器</h3>
+    <p>Three.js + Firebase，在静态托管条件下验证跨设备对象状态同步。</p>
+    <strong class="visual-card__action">打开 Demo →</strong>
+  </a>
+</div>
 
-## 写作目标
+## 文章与能力地图
 
-- 把可视化项目拆成面试可讲的技术点（架构、性能、取舍）
-- 覆盖 Web 三维与相关工程实践，形成可持续更新的能力地图
-- 用真实问题驱动内容，而不是堆砌概念
+<div class="visual-card-grid">
+  <a class="visual-card visual-card--compact" href="/categories/visualization/">
+    <span class="visual-card__eyebrow">Writing</span>
+    <h3>三维可视化文章</h3>
+    <p>查看 DICOM/MPR、Web3D 协同、架构取舍与后续算法实验文章。</p>
+    <strong class="visual-card__action">查看文章列表 →</strong>
+  </a>
 
-## 计划主题
-
-1. 渲染基础：相机、坐标系、材质与光照
-2. 场景工程：模型加载、层级管理、资源与内存
-3. 交互与体验：拾取、编辑、漫游与状态同步
-4. 性能优化：Draw Call、LOD、批处理、帧预算
-5. 工程落地：与业务系统集成、调试与可观测性
-
-## 相关文章
-
-请前往分类页查看本专栏全部文章：
-
-[三维可视化开发 · 文章列表](/categories/visualization/)
+  <a class="visual-card visual-card--compact" href="/2026/03/26/专栏导读-三维可视化开发/">
+    <span class="visual-card__eyebrow">Capability Map</span>
+    <h3>三维能力地图</h3>
+    <p>从场景工程、计算几何到体数据与 GPU，了解项目组合对应的能力证据。</p>
+    <strong class="visual-card__action">查看能力地图 →</strong>
+  </a>
+</div>

@@ -35,6 +35,13 @@
 | 实作文 | 《实作：GitHub Pages 上的 Web 3D 协同编辑器》 | done |
 | 原理文 | 《原理详解：Web 端多端协同如何在无后端下工作》 | done |
 | 专栏导读 | 《专栏导读：三维可视化开发》 | done |
+| CT3D 项目理解 | 核对 MATLAB / C# 数据流、现有能力与边界 | done |
+| CT3D 项目详情页 | `/visualization/ct3d/`，含架构、验证与 roadmap | done |
+| CT3D 系列文章 | DICOM/HU、MPR、迁移验证、Oblique/Slab 共四篇 | done |
+| CT3D 站点入口 | 首页、三维专栏、About 作品卡 | done |
+| CT3D 可信证据 | 29 个测试、Golden Fixture、Benchmark、.NET CI | done |
+| 三维专栏卡片导航 | 核心项目 / Web3D 实验 / 文章能力地图 | done |
+| 后续项目规划页 | Industrial Geometry Pipeline / GPU Volume Ray Casting | done |
 
 ### 3. 金融高性能 · 已有内容
 
@@ -73,9 +80,23 @@
 | V-06 | 文章：剖切/截面在 BIM/工业场景的用途与实现要点 | 长文 | P2 | todo |
 | V-07 | 文章：体素/空间索引为何能加速拾取 | 长文 | P2 | todo |
 | V-08 | algorithm-lab：性能面板（面数、拾取耗时） | demo 增强 | P2 | todo |
-| V-09 | 项目卡片：可公开项目「背景/难点/方案/结果/复盘」挂 About | 页面 | P1 | todo |
+| V-09 | 项目卡片：可公开项目「背景/难点/方案/结果/复盘」挂 About | 页面 | P1 | done |
 | V-10 | LOD / 批处理 / 帧预算专题（可先短文后 demo） | 文 ± demo | P2 | later |
 | V-11 | 与业务系统集成：REST 拉构件树 + 前端展示 | 文 ± demo | P3 | later |
+| V-12 | CT3D：梳理 DICOM→HU→MPR/Oblique/Slab 数据流与能力边界 | 代码理解/验证记录 | P0 | done |
+| V-13 | CT3D：建立 MATLAB/C# 跨实现输入、参数与期望输出基准 | 验证资产 | P0 | done |
+| V-14 | CT3D：DICOM/HU、MPR、迁移验证、Oblique/Slab 系列文章 | 四篇长文 | P0 | done |
+| V-15 | CT3D：旗舰项目详情页与站点入口 | 页面 | P0 | done |
+| V-16 | CT3D：固定环境采集加载、重采样与 Slab 性能基线 | 基准记录 | P1 | todo |
+| V-17 | CT3D：补充不含患者数据的合成体 MPR 示意 | 项目页素材 | P2 | done |
+| V-20 | CT3D：数据许可与去标识确认后补真实程序录屏 | 项目页素材 | P2 | later |
+| V-18 | Industrial 3D Geometry Pipeline：架构、里程碑、自研算法与验收蓝图 | 规划详情页 | P1 | done |
+| V-19 | GPU Volume Ray Casting：CPU/CUDA 对照、优化与性能证据蓝图 | 规划详情页 | P1 | done |
+| V-21 | Industrial 3D Geometry Pipeline：创建独立仓库并完成 MVP | 独立项目（实施队列 1） | P2 | later |
+| V-22 | GPU Volume Ray Casting：旗舰 MVP 稳定后创建独立仓库 | 独立项目（实施队列 2） | P2 | later |
+| V-23 | 三维专栏改为核心项目 / Web3D 实验 / 文章三组整卡导航 | 页面改造 | P1 | done |
+
+> 两个规划页只展示技术蓝图，不代表项目代码已经存在。实施顺序固定为 V-21 → V-22；CPU/GPU BVH 留在旗舰项目进阶阶段，不另建重复项目。
 
 ### B. 金融高性能（优先 · 职业方向）
 
@@ -102,7 +123,7 @@
 
 | ID | 内容 | 优先级 | 状态 |
 | --- | --- | --- | --- |
-| S-01 | About「项目与作品」补齐可点击作品卡 | P1 | todo |
+| S-01 | About「项目与作品」补齐可点击作品卡 | P1 | done |
 | S-02 | 首页/专栏页增加「最新更新」三条 | P2 | todo |
 | S-03 | Giscus 评论（可选，GitHub Discussions） | P3 | later |
 | S-04 | README 补充专栏结构与 Firebase 说明 | P2 | wip |
@@ -112,11 +133,10 @@
 
 ## 三、建议推进顺序（近 4 周）
 
-1. **S-05** 部署线上，保证 Mac/外网能开最新编辑器与 lab  
-2. **F-01 / F-02** 金融专栏先出两篇硬文章（简历叙事）  
-3. **V-05 + V-09** 把 algorithm-lab 写成可讲项目，并挂到 About  
-4. **V-02** 收紧 Firebase 规则（演示可匿名房间，防裸写全库）  
-5. **V-01** 协同体验增强（选中态/谁在改）  
+1. **V-16** 在固定环境记录并解释 MPR、Oblique 与 Slab 性能基线
+2. **V-05 + V-02** 补工业标注文章，并收紧 Firebase Rules
+3. **F-01 / F-02** 保留金融主线，完成延迟测量与 .NET 并发两篇硬文章
+4. **V-21 → V-22** 后续按顺序实施，不并行开发；创建仓库前保持“规划中”状态
 
 ---
 

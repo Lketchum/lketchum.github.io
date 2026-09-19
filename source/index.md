@@ -35,6 +35,13 @@ toc: false
   </a>
 </div>
 
+<a class="home-flagship" href="/visualization/ct3d/">
+  <span class="home-flagship__label">当前旗舰项目</span>
+  <span class="home-flagship__title">CT3D 医疗体数据可视化</span>
+  <span class="home-flagship__desc">DICOM → HU、MPR、Oblique 与 Slab：从 MATLAB 原型到 C# .NET 8 WPF 工程验证。</span>
+  <span class="home-flagship__link">查看项目详情 →</span>
+</a>
+
 <div class="home-secondary">
   <a href="/about/">关于我</a>
   <a href="/posts/">全部文章</a>

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">CT3D synthetic MPR visualization</title>
+  <desc id="desc">Three synthetic grayscale sections illustrate axial, coronal, and sagittal MPR without patient data.</desc>
+  <rect width="1200" height="420" fill="#111827"/>
+  <text x="48" y="48" fill="#f9fafb" font-family="Arial, sans-serif" font-size="24" font-weight="700">CT3D · Synthetic MPR Fixture</text>
+  <text x="48" y="76" fill="#9ca3af" font-family="Arial, sans-serif" font-size="15">Algorithm illustration · no patient data · not a WPF screenshot</text>
+
+  <g transform="translate(48 110)">
+    <rect width="336" height="248" rx="8" fill="#030712" stroke="#374151"/>
+    <ellipse cx="168" cy="124" rx="118" ry="92" fill="#374151"/>
+    <ellipse cx="168" cy="124" rx="78" ry="61" fill="#6b7280"/>
+    <ellipse cx="140" cy="105" rx="30" ry="25" fill="#d1d5db"/>
+    <ellipse cx="201" cy="142" rx="22" ry="35" fill="#9ca3af"/>
+    <line x1="168" y1="20" x2="168" y2="228" stroke="#38bdf8" stroke-width="2"/>
+    <line x1="40" y1="124" x2="296" y2="124" stroke="#38bdf8" stroke-width="2"/>
+    <text x="16" y="28" fill="#f9fafb" font-family="Arial, sans-serif" font-size="16">Axial</text>
+  </g>
+
+  <g transform="translate(432 110)">
+    <rect width="336" height="248" rx="8" fill="#030712" stroke="#374151"/>
+    <ellipse cx="168" cy="124" rx="84" ry="104" fill="#374151"/>
+    <rect x="132" y="55" width="72" height="142" rx="32" fill="#6b7280"/>
+    <ellipse cx="151" cy="105" rx="20" ry="39" fill="#d1d5db"/>
+    <ellipse cx="188" cy="150" rx="17" ry="30" fill="#9ca3af"/>
+    <line x1="168" y1="18" x2="168" y2="230" stroke="#38bdf8" stroke-width="2"/>
+    <line x1="68" y1="124" x2="268" y2="124" stroke="#38bdf8" stroke-width="2"/>
+    <text x="16" y="28" fill="#f9fafb" font-family="Arial, sans-serif" font-size="16">Coronal</text>
+  </g>
+
+  <g transform="translate(816 110)">
+    <rect width="336" height="248" rx="8" fill="#030712" stroke="#374151"/>
+    <ellipse cx="168" cy="124" rx="72" ry="105" fill="#374151"/>
+    <ellipse cx="168" cy="124" rx="44" ry="75" fill="#6b7280"/>
+    <ellipse cx="170" cy="93" rx="24" ry="37" fill="#d1d5db"/>
+    <ellipse cx="158" cy="158" rx="19" ry="27" fill="#9ca3af"/>
+    <line x1="168" y1="18" x2="168" y2="230" stroke="#38bdf8" stroke-width="2"/>
+    <line x1="82" y1="124" x2="254" y2="124" stroke="#38bdf8" stroke-width="2"/>
+    <text x="16" y="28" fill="#f9fafb" font-family="Arial, sans-serif" font-size="16">Sagittal</text>
+  </g>
+
+  <text x="48" y="394" fill="#9ca3af" font-family="Arial, sans-serif" font-size="14">Purpose: explain view orientation and linked indices with a deterministic synthetic volume.</text>
+</svg>
